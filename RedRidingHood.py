@@ -1,4 +1,7 @@
+from abc import abstractproperty
 from ast import walk
+from os import terminal_size
+from typing import Iterator
 import pygame
 import time
 from pygame.locals import *
@@ -65,6 +68,8 @@ plant_fx = pygame.mixer.Sound("music/plant.wav")
 atk1_fx = pygame.mixer.Sound("music/atk.wav")
 mino_atk_fx = pygame.mixer.Sound("music/atk2.wav")
 damage_fx = pygame.mixer.Sound("music/damage.wav")
+arrow_release_fx = pygame.mixer.Sound("music/arrow_release.wav")
+arrow_hit_fx = pygame.mixer.Sound("music/arrow_hit.wav")
 pygame.mixer.music.load("music/Conturbatio.wav")
 pygame.mixer.music.play(-1, 0.0, 1000)
 
@@ -85,6 +90,10 @@ class Player:
         self.images_left_jump = []
         self.images_right_latk = []
         self.images_left_latk = []
+        self.images_right_shoot = []
+        self.images_left_shoot = []
+        self.images_right_ded = []
+        self.images_left_ded = []
         self.index = 0
         self.counter = 0
         self.run_fx = False
@@ -97,10 +106,23 @@ class Player:
         self.flower_counter = 0
         self.latk_index = 0
         self.latk_counter = 0
+        self.latk_dmg = 50
         self.light_atk_sequence = False
         self.atk_music = False
         self.health = 100 
         self.flower_cooler = 0
+        self.shoot_index = 0
+        self.shoot_counter = 0
+        self.shoot_sequence = False
+        self.shoot_music = False
+        self.powerup_index = 0
+
+        self.ded_index = 0
+        self.ded_counter = 0
+        self.ded_sequence = False
+        self.ded_music = False
+
+        self.num_of_arrows = 12
 
 
         for num in range(1, 4):
@@ -127,6 +149,18 @@ class Player:
             img_left_latk = pygame.transform.flip(img_right_latk, True, False)
             self.images_right_latk.append(img_right_latk)
             self.images_left_latk.append(img_left_latk)
+        for num in range(1, 13):
+            img_left_shoot = pygame.image.load(f"img/shoot_list/shoot{num}.png").convert_alpha()
+            img_left_shoot = pygame.transform.scale(img_left_shoot, (40, 80))
+            img_right_shoot = pygame.transform.flip(img_left_shoot, True, False)
+            self.images_right_shoot.append(img_right_shoot)
+            self.images_left_shoot.append(img_left_shoot)
+        for num in range(1, 7):
+            img_left_ded = pygame.image.load(f"img/ded_list/ded{num}.png").convert_alpha()
+            img_left_ded = pygame.transform.scale(img_left_ded, (40, 80))
+            img_right_ded = pygame.transform.flip(img_left_ded, True, False)
+            self.images_right_ded.append(img_right_ded)
+            self.images_left_ded.append(img_left_ded)
 
         self.image = self.images_right_idle[self.idle_index]
         self.rect = self.image.get_rect()
@@ -151,7 +185,7 @@ class Player:
         walk_music_cooldown = 20
         idle_cooldown = 8
         flower_cooldown = 8
-        latk_cooldown = 2
+        
         
         
         col_thresh = 20
@@ -232,7 +266,14 @@ class Player:
                     atk1_fx.play()
                     self.atk_music = True
                 self.light_atk_sequence = True
-                
+            
+            #shoot arrows
+            if key[pygame.K_w] and self.num_of_arrows > 0:
+                if self.shoot_music == False:
+                    arrow_release_fx.play()
+                    self.shoot_music = True
+                    self.num_of_arrows -= 1
+                self.shoot_sequence = True
                             
 
                     
@@ -306,7 +347,26 @@ class Player:
                             self.vel_y = 0
                             self.in_air = False
             
+            #check for collision with powerups
+            if pygame.sprite.spritecollide(self, powerup_group, False):
+                powerup_list =  pygame.sprite.spritecollide(self, powerup_group, True)
+                for powerup in powerup_list:
+                    if powerup.index == 1:
+                        powerup_group.remove(powerup)
+                        flower_fx.play()
+                        self.num_of_arrows += 5
+                    elif powerup.index == 2:
+                        powerup_group.remove(powerup)
+                        flower_fx.play()
+                        self.powerup_index = 2
+                    elif powerup.index == 3:
+                        powerup_group.remove(powerup)
+                        flower_fx.play()
+                        self.powerup_index = 3
 
+
+
+                
             
 
 
@@ -319,39 +379,142 @@ class Player:
                 
                 self.rect.x -= dx
                 screen_scroll = -dx
-
-        # draw player onto the screen
-        if self.light_atk_sequence == True:
-            self.latk_counter += 1
-            if self.latk_counter > latk_cooldown:
-                self.latk_counter = 0
+    
+            # draw player onto the screen
+            if self.light_atk_sequence == True:
+                self.latk()
+            elif self.shoot_sequence == True:
+                self.shoot_arrow()
                 
-                self.latk_index += 1
-                if self.latk_index >= len(self.images_right_latk):
-                    self.light_atk_sequence = False
-                    self.latk_index = 0
-                    if pygame.sprite.spritecollide(self, minotaur_group, False):
-                        minotaur_list = pygame.sprite.spritecollide(self, minotaur_group, False)
-                        for minotaur in minotaur_list:
-                            minotaur.health -= 50
-                    self.atk_music = False
-                if self.direction == 1:
-                    self.image = self.images_right_latk[self.latk_index]
-                if self.direction == -1:
-                    self.image = self.images_left_latk[self.latk_index]
-                screen.blit(self.image,self.rect)
             else:
                 screen.blit(self.image, self.rect)
-                #time.sleep(0.01)
-        else:
-            screen.blit(self.image, self.rect)
-        self.flower_cooler -= 1
-        if self.flower_cooler < 0:
-            self.flower_cooler = 0
+            self.flower_cooler -= 1
+            if self.flower_cooler < 0:
+                self.flower_cooler = 0
+        elif game_over == -1:
+            if self.ded_sequence == False:
+                self.ded()
+                if self.ded_music == True:
+                    damage_fx.play()
+                    self.ded_music = False
+            else:
+                self.image = self.images_left_ded[5]
+                screen.blit(self.image,self.rect)
+            # add gravity
+            self.vel_y += 1
+            if self.vel_y > 10:
+                self.vel_y = 10
+            dy += self.vel_y
+
+            # check for collision
+            self.in_air = True
+
+            for tile in world.tile_list:
+                # check for collision in x direction
+                if tile[2] != False:
+
+                    if tile[1].colliderect(
+                        self.rect.x + dx, self.rect.y, self.width, self.height
+                    ):
+                        dx = 0
+
+                    # check for collision in y direction
+                    if tile[1].colliderect(
+                        self.rect.x, self.rect.y + dy, self.width, self.height
+                    ):
+                        # check if below the ground i.e. jumping
+                        if self.vel_y < 0:
+                            dy = tile[1].bottom - self.rect.top
+                            self.vel_y = 0
+
+                        # check if above the ground i.e. falling
+                        elif self.vel_y >= 0:
+                            dy = tile[1].top - self.rect.bottom
+                            self.vel_y = 0
+                            self.in_air = False
+                
 
         return screen_scroll
         #pygame.draw.rect(screen, (255, 255, 255), self.rect, 2)
 
+    def latk(self):
+        latk_cooldown = 2
+        self.latk_counter += 1
+        if self.latk_counter > latk_cooldown:
+            self.latk_counter = 0
+            
+            self.latk_index += 1
+            if self.latk_index >= len(self.images_right_latk):
+                self.light_atk_sequence = False
+                self.latk_index = 0
+                if pygame.sprite.spritecollide(self, minotaur_group, False):
+                    minotaur_list = pygame.sprite.spritecollide(self, minotaur_group, False)
+                    for minotaur in minotaur_list:
+                        minotaur.health -= self.latk_dmg
+                self.atk_music = False
+            if self.direction == 1:
+                self.image = self.images_right_latk[self.latk_index]
+            if self.direction == -1:
+                self.image = self.images_left_latk[self.latk_index]
+            screen.blit(self.image,self.rect)  
+        else:
+            screen.blit(self.image, self.rect)
+            #time.sleep(0.01)      
+    def shoot_arrow(self):
+        shoot_cooldown = 1
+        self.shoot_counter += 1
+        if self.shoot_counter > shoot_cooldown:
+            self.shoot_counter = 0
+            
+            self.shoot_index += 1
+            if self.shoot_index >= len(self.images_right_shoot):
+                self.shoot_sequence = False
+                self.shoot_index = 0
+
+            if self.shoot_index == 5:
+
+                if self.powerup_index == 2:
+                    arrow = Arrow(self.rect.centerx ,self.rect.centery,self.direction)
+                    arrow_group.add(arrow)
+                    arrow = Arrow(self.rect.centerx ,self.rect.centery - 7,self.direction)
+                    arrow_group.add(arrow)
+                    arrow = Arrow(self.rect.centerx ,self.rect.centery + 7,self.direction)
+                    arrow_group.add(arrow)
+                elif self.powerup_index == 3:
+                    arrow = Arrow(self.rect.centerx ,self.rect.centery,self.direction)
+                    arrow.damage *= 4
+                    arrow_group.add(arrow)
+                else:
+                    arrow = Arrow(self.rect.centerx ,self.rect.centery,self.direction)
+                    arrow_group.add(arrow)
+                
+                self.shoot_music = False
+            if self.direction == 1:
+                self.image = self.images_right_shoot[self.shoot_index]
+            if self.direction == -1:
+                self.image = self.images_left_shoot[self.shoot_index]
+              
+        
+        screen.blit(self.image, self.rect)
+            #time.sleep(0.01)
+
+    def ded(self):
+        ded_cooldown = 2
+        self.ded_counter += 1
+        if self.ded_counter > ded_cooldown:
+            self.ded_counter = 0
+            
+            self.ded_index += 1
+            if self.ded_index >= len(self.images_right_ded):
+                self.ded_sequence = True
+                self.ded_index = 0
+                
+            if self.direction == 1:
+                self.image = self.images_right_ded[self.ded_index]
+            if self.direction == -1:
+                self.image = self.images_left_ded[self.ded_index]
+        screen.blit(self.image,self.rect)  
+        
 
 class World:
     def __init__(self, data):
@@ -493,7 +656,16 @@ class World:
                 if tile == 16:
                     minotaur = Minotaur(col_count * tile_size ,row_count * tile_size - 30 )
                     minotaur_group.add(minotaur)
-                
+
+                if tile == 17:
+                    powerup = Arrow_powerup1(col_count * tile_size ,row_count * tile_size )
+                    powerup_group.add(powerup)
+                if tile == 18:
+                    powerup = Arrow_powerup2(col_count * tile_size ,row_count * tile_size )
+                    powerup_group.add(powerup)
+                if tile == 19:
+                    powerup = Arrow_powerup3(col_count * tile_size ,row_count * tile_size )
+                    powerup_group.add(powerup)
                 col_count += 1
             row_count += 1
 
@@ -553,6 +725,7 @@ class Minotaur(pygame.sprite.Sprite):
         self.ded_music = False
         self.jumped = False
         self.in_air = False
+        self.damage = 20
 
 
 
@@ -623,9 +796,11 @@ class Minotaur(pygame.sprite.Sprite):
                         self.atk1_index = 0
                         self.atk1_music = False
                         self.iterations = 0
-                    if self.atk1_index >= (len(self.images_right_atk1)//2) and self.atk1_index <= (len(self.images_right_atk1)//2):
+                    if self.atk1_index >= ((int(len(self.images_right_atk1))//2)) and self.atk1_index <= (len(self.images_right_atk1)//2):
                         if pygame.sprite.spritecollide(player, minotaur_group, False):
-                            player.health -= 10
+                            player.health -= self.damage
+                            if player.health <= 0:
+                                damage_fx.play()
 
                         
                         
@@ -648,6 +823,8 @@ class Minotaur(pygame.sprite.Sprite):
                         self.idle(screen_scroll)
                 else: 
                     self.ai(screen_scroll)
+
+        
         # add gravity
         self.vel_y += 1
         if self.vel_y > 10:
@@ -680,8 +857,16 @@ class Minotaur(pygame.sprite.Sprite):
         self.rect.x += self.dx
         self.rect.y += self.dy
         self.rect.x += screen_scroll
+        self.mino_healthbar(self.rect.x,self.rect.y)
         #pygame.draw.rect(screen, (255, 255, 255), self.rect, 2)
         
+    def mino_healthbar(self,x,y):
+        if self.direction == 1:
+            pygame.draw.rect(screen,(255,0,0),(x+15,y-7,int(200//4),10 ))
+            pygame.draw.rect(screen,(0,255,0),(x+15,y-7,int(self.health//4),10 ))
+        elif self.direction == -1:
+            pygame.draw.rect(screen,(255,0,0),(x+40,y-7,int(200//4),10 ))
+            pygame.draw.rect(screen,(0,255,0),(x+40,y-7,int(self.health//4),10 ))
         
         
 
@@ -807,6 +992,56 @@ class Minotaur(pygame.sprite.Sprite):
         if self.detect_player == True and abs(player.rect.x - self.rect.x) > 300:
             self.detect_player = False
 
+class Arrow(pygame.sprite.Sprite):
+    def __init__(self, x, y,direction):
+        pygame.sprite.Sprite.__init__(self)
+        # load image
+        img = pygame.image.load("img/arrow.png").convert_alpha()
+        self.image_right = pygame.transform.scale(img, (tile_size//2 , int(tile_size // 5)))
+        self.image_left = pygame.transform.flip(self.image_right, True, False)
+        
+        self.direction = direction
+        self.speed = 15
+        self.dx = 0
+        self.dy = 0
+        self.stopped = False
+        self.damage = 30
+        if self.direction == 1:
+            self.image = self.image_right
+        if self.direction == -1:
+            self.image = self.image_left
+
+        self.rect = self.image.get_rect()
+
+        self.rect.center = (x,y)
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+            
+    def update(self,screen_scroll):
+        screen.blit(self.image,self.rect)
+        self.dx = self.speed*self.direction
+        #check for collision
+        self.in_air = True
+        for tile in world.tile_list:
+                # check for collision in x direction
+                if tile[2] == True and tile[1].colliderect(
+                    self.rect.x + self.dx, self.rect.y, self.width, self.height
+                ):
+                    self.dx = 0
+                    arrow_hit_fx.play()
+                    arrow_group.remove(self)
+
+
+        #check for collision with minotaur
+        if pygame.sprite.spritecollide(self, minotaur_group, False):
+                    minotaur_list = pygame.sprite.spritecollide(self, minotaur_group, False)
+                    for minotaur in minotaur_list:
+                        minotaur.health -= self.damage
+                        arrow_hit_fx.play()
+                    arrow_group.remove(self)
+        self.rect.x += self.dx
+        self.rect.x += screen_scroll
+
         
 class Score_Flower(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -819,6 +1054,65 @@ class Score_Flower(pygame.sprite.Sprite):
         self.consumed = False
     def update(self,screen_scroll):
         screen.blit(self.image,self.rect)
+
+class Arrow_count(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        # load image
+        img = pygame.image.load("img/arrow.png").convert_alpha()
+        self.image = pygame.transform.scale(img, (tile_size // 2, int(tile_size // 5)))
+        self.image = pygame.transform.rotozoom(self.image,45,1)
+        self.rect = self.image.get_rect()
+        self.rect.center = (x,y)
+        
+    def update(self,screen_scroll):
+        screen.blit(self.image,self.rect)
+
+class Arrow_powerup1(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        # load image
+        img = pygame.image.load("img/arrow_powerup.png").convert_alpha()
+        self.image = pygame.transform.scale(img, (int(tile_size // 1.5), int(tile_size // 1.5)))
+        self.rect = self.image.get_rect()
+        self.rect.center = (x,y)
+        self.consumed = False
+        self.index = 1
+    def update(self,screen_scroll):
+        self.rect.x += screen_scroll
+        screen.blit(self.image,self.rect)
+        pygame.draw.circle(screen, (0,0,255), (self.rect.centerx,self.rect.centery), 25, 3)
+
+class Arrow_powerup2(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        # load image
+        img = pygame.image.load("img/arrow_powerup2.png").convert_alpha()
+        self.image = pygame.transform.scale(img, (int(tile_size // 1.5), int(tile_size // 1.5)))
+        self.rect = self.image.get_rect()
+        self.rect.center = (x,y)
+        self.consumed = False
+        self.index = 2
+    def update(self,screen_scroll):
+        self.rect.x += screen_scroll
+        screen.blit(self.image,self.rect)
+        pygame.draw.circle(screen, (255,140,0), (self.rect.centerx,self.rect.centery), 25, 3)
+
+class Arrow_powerup3(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        # load image
+        img = pygame.image.load("img/arrow_powerup3.png").convert_alpha()
+        self.image = pygame.transform.scale(img, (int(tile_size // 1.5), int(tile_size // 1.5)))
+        self.rect = self.image.get_rect()
+        self.rect.center = (x,y)
+        self.consumed = False
+        self.index = 3
+    def update(self,screen_scroll):
+        self.rect.x += screen_scroll
+        screen.blit(self.image,self.rect)
+        pygame.draw.circle(screen, (50,140,250), (self.rect.centerx,self.rect.centery), 25, 3)
+
 
 
             
@@ -838,23 +1132,31 @@ world_data = [
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0  ,13,5,16,3,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,    12,6,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,   12,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-    [1,11,0,0,7,8,0,4,0,11,0,3,0,10,12,6,0,15,0,10,0,4,14,11,0,3,0,10,10,0,5,1,13,0,2,13,0,1,5,11,16,0,0,1,0,0,0,0,3,12,15,0,0,0,11,0,1,0,0,1,0,13,0,0,0,16,0,14,0,2,0,11,0,5,0,0,5,0,10,10,16,0,3],
-    [9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9],
-    [6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6],
+    [0,0,0,19,0,0,0,0,0,0,0,0,0,0,   12,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [1,11,0,0,7,8,0,4,0,11,0,3,0,10,12,6,0,15,0,10,0,4,14,11,0,3,17,10,10,0,5,1,13,0,2,13,0,1,5,11,16,0,0,1,0,0,0,0,3,12,15,0,17,0,11,0,1,0,0,1,0,13,0,0,0,16,0,14,0,2,0,11,0,5,0,18,5,0,10,10,16,0,3,0,0,16,0,5,5,0,11,1,0,16,0,0,0,0,0,0,11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9],
+    [6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,],
 ]
 
 flower_group = pygame.sprite.Group()
 player = Player(200, screen_height - 260 + 2)
 minotaur_group = pygame.sprite.Group()
+arrow_group = pygame.sprite.Group()
+powerup_group = pygame.sprite.Group()
 health = health_bar()
 
 dummy_flower = Score_Flower(20,tile_size)
+dummy_arrow = Arrow_count(20,tile_size + 40)
+arrow_group.add(dummy_arrow)
+
 flower_group.add(dummy_flower)
 world = World(world_data)
 
 text_x = 0
 text_x = tile_size
+
+powerup_iterations = 0
+set_iterations = False
 
 while run:
 
@@ -867,6 +1169,7 @@ while run:
     
     draw_text("HEALTH", font_health, (255,255,255), 0 , 10)
     draw_text("X" + str(player.flower_count), font_health, (255,255,255), 40 , tile_size - 10)
+    draw_text("X" + str(player.num_of_arrows), font_health, (255,255,255), 50 , tile_size + 40 - 10)
 
     health.draw(player.health)
     flower_group.draw(screen)
@@ -880,10 +1183,28 @@ while run:
     
     minotaur_group.draw(screen)
     minotaur_group.update(screen_scroll)
+    arrow_group.draw(screen)
+    arrow_group.update(screen_scroll)
+    powerup_group.draw(screen)
+    powerup_group.update(screen_scroll)
     
     if player.health <= 0:
         game_over = -1
         pass
+    if player.powerup_index != 0 and set_iterations == False:
+        powerup_iterations = 250
+        set_iterations = True
+
+    if powerup_iterations == 0:
+        set_iterations = False
+        player.powerup_index = 0
+
+    if powerup_iterations > 0:
+        powerup_iterations -= 1
+    
+    print(powerup_iterations)
+    
+        
     #print(player.health)
 
     for event in pygame.event.get():
