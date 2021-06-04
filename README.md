@@ -10,8 +10,8 @@ A 2d platformer Game
 
 ## Attacking
 
-- <kbd>W</kbd>: shoot arrows
-- <kbd>Q</kbd>: use light attack
+- <kbd>W</kbd>: shoot arrows :bow_and_arrow:
+- <kbd>Q</kbd>: use light attack :knife:
 
 ## Interactive
 - <kbd>E</kbd>: Pick flowers
