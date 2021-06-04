@@ -18,4 +18,4 @@ A 2d platformer Game
 - <kbd>F</kbd>: Plant flowers
 
 ## Note: 
-Pick up a flower and plant it again to heal
+Pick up a flower :sunflower: and plant it again to heal :hospital:
