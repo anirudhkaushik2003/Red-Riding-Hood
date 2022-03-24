@@ -33,3 +33,4 @@ The objective of the game is to make it through the forest alive while collectin
 - <kbd>Arrow refil</kbd>
 - <kbd>Arrow attack damage x4</kbd>
 - <kbd>Shoot 3x arrows at once</kbd>
+
