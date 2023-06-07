@@ -48,4 +48,6 @@ concept map.
 
 - To know more about the method and my though process kindly refer to the comic strip and conecpt map pdf.
 
+## Images
+![image](https://github.com/anirudhkaushik2003/Red-Riding-Hood/assets/71220864/99e74394-bfa9-4624-857f-303e29059a9d)
 
